@@ -33,19 +33,6 @@ Standard evaluation frameworks often suffer from critical security and benchmark
 
 ---
 
-## 📌 How to Put It on Your Resume
-
-> **AutoEval Sandboxed Benchmarking Platform**: Architected an automated evaluation engine using Python (FastAPI) and Docker SDK to safely execute untrusted code in hardened, resource-constrained Linux sandboxes; automated deterministic test harnesses (pytest), AST security parsing, and algorithmic Big-O profiling for LLM benchmark alignment.
-
-### Key Competencies Demonstrated:
-- **Defense-in-Depth Container Sandboxing**: Linux cgroups v2 (`256MB` RAM quota, `0.5 vCPU` CFS throttle), isolated network namespace (`--net=none`), read-only root filesystem with noexec tmpfs, and dropped Linux capabilities (`cap_drop=['ALL']`).
-- **Pre-Execution AST Static Security**: Abstract Syntax Tree parsing to preemptively block RCE, malicious dunder gadgets (`__subclasses__`, `__globals__`), and unauthorized network/file I/O.
-- **Empirical Big-O Profiling Engine**: Dynamic runtime benchmarking scaling across input sizes $N \in [50, \dots, 1600]$ with Ordinary Least Squares regression to classify algorithmic time complexity ($O(1)$, $O(\log N)$, $O(N)$, $O(N \log N)$, $O(N^2)$, $O(2^N)$).
-- **Asynchronous Architecture**: Non-blocking FastAPI gateway backed by Redis and Celery distributed task queues with worker prefetch control.
-- **Production Cloud Infrastructure**: Infrastructure as Code (Terraform) deploying AWS ECS/Fargate, ElastiCache Redis, VPC networking, and Application Load Balancers.
-
----
-
 ## 🏗 Technical Architecture & Data Flow
 
 ```mermaid
