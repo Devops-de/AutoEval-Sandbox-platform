@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  # In-memory Redis Job Broker and Result Cache
+  redis:
+    image: redis:7-alpine
+    container_name: autoeval-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    command: redis-server --appendonly no
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # FastAPI Gateway Service
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: autoeval-api
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOCKER_IMAGE=autoeval-sandbox:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Celery Asynchronous Evaluation Worker
+  celery-worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    container_name: autoeval-worker
+    command: celery -A autoeval.worker.celery_app.celery_app worker --loglevel=info --concurrency=4
+    volumes:
+      # Mount Docker socket to allow worker to spin up ephemeral sandbox containers
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - APP_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - DOCKER_IMAGE=autoeval-sandbox:latest
+      - MEMORY_LIMIT_MB=256
+      - CPU_QUOTA_VCPU=0.5
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
