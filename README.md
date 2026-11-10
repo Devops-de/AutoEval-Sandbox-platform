@@ -11,25 +11,53 @@
 
 An enterprise-grade, asynchronous code evaluation platform engineered to safely benchmark and grade untrusted LLM-generated code under strict isolation constraints.
 
-> **Target Audience**: AI Alignment Labs (OpenAI, Anthropic, Scale AI), Alignerr Evaluation Engineers, and Senior Platform/DevOps Engineers architecting execution backends for LLM code generation benchmarks (e.g., HumanEval, SWE-bench, EvalPlus).
+> **Target Audience**: AI Alignment Labs (OpenAI, Anthropic, Scale AI), Alignerr Evaluation Engineers, and Platform/DevOps Engineers building automated execution backends for code synthesis benchmarks (HumanEval, SWE-bench, EvalPlus).
 
 ---
 
-## 🔬 About the Platform
+## 🔬 About AutoEval Sandbox
+
+**AutoEval Sandbox** is an automated, secure execution and benchmarking engine engineered to evaluate untrusted LLM-generated Python code at scale. It combines **Linux kernel-level sandboxing (cgroups v2)**, **pre-execution AST security filtering**, and **mathematical Big-O runtime profiling** to deliver production-grade code evaluation without security or performance risks.
 
 Modern Large Language Models (LLMs) trained on code synthesis present a critical infrastructure challenge: **how to evaluate non-deterministic, untrusted code generated at scale without compromising host infrastructure, introducing network pivot vulnerabilities, or suffering resource-exhaustion denial of service.**
 
-Standard evaluation frameworks often suffer from critical security and benchmarking gaps:
-1. **Inadequate Sandboxing**: Relying on in-process `exec()` or unhardened containers leaves worker nodes vulnerable to container breakouts, local privilege escalation, and socket-based SSRF/exfiltration.
-2. **Binary Pass/Fail Limitation**: Traditional unit test suites only measure functional correctness, failing to catch algorithmic antipatterns (e.g., an $O(N^2)$ brute-force solution masquerading as an optimal $O(N \log N)$ algorithm).
-3. **Queue Saturation Under Peak Benchmark Loads**: Evaluating thousands of test generations synchronously degrades API gateways and triggers HTTP timeouts.
+AutoEval solves this by establishing a defense-in-depth pipeline that validates code across three essential axes: **Safety**, **Correctness**, and **Algorithmic Efficiency**.
 
-**AutoEval Sandbox** solves this by establishing an industry-standard, multi-layered evaluation pipeline:
-- **Pre-execution Static AST Analysis**: Syntactically inspects abstract syntax trees to block malicious imports, calls, and Python sandbox escape gadgets before container spin-up.
-- **Defense-in-Depth Container Isolation**: Enforces Linux kernel `cgroups v2`, CPU CFS quotas, strict memory caps, zero swap, isolated network namespaces (`--net=none`), read-only root filesystems, and complete capability stripping.
-- **Empirical Algorithmic Big-O Profiling**: Benchmarks candidate algorithms across parameterized input dimensions $N \in [50, \dots, 1600]$, applying Ordinary Least Squares (OLS) regression curve fitting to classify runtime complexity classes.
-- **Decoupled Asynchronous Queue**: Leverages Redis and Celery worker pools with deterministic task acknowledgment, enabling high-concurrency batch evaluation workloads.
-- **Structured 100-Point Alignment Rubric**: Outputs machine-readable JSON reports compliant with AI reward modeling and RLHF alignment rubrics.
+---
+
+### 🎯 Why AutoEval? Traditional Runners vs. AutoEval Sandbox
+
+| Feature | Naive In-Process (`exec` / `subprocess`) | Standard Docker Containers | 🛡️ **AutoEval Sandbox** |
+| :--- | :---: | :---: | :---: |
+| **Network Egress** | ❌ Full Host Access | ⚠️ Allowed by Default | ✅ **Isolated (`--net=none`, zero egress)** |
+| **Resource Bounds** | ❌ Unbounded (Host Freeze) | ⚠️ Uncapped unless configured | ✅ **Strict cgroups (256MB RAM / 0.5 vCPU)** |
+| **Pre-Execution Safety** | ❌ None | ❌ None | ✅ **Static AST Gatekeeper & Bandit SAST** |
+| **Algorithmic Profiling** | ❌ Single-point timing | ❌ Basic runtime only | ✅ **Empirical Big-O Curve Fitting ($O(1)$ to $O(2^N)$)** |
+| **Sandbox Breakout Defense**| ❌ Host Compromised | ⚠️ Vulnerable to setuid / caps | ✅ **Dropped Capabilities (`ALL`) & Non-Root (UID 10001)** |
+| **Batch Scalability** | ❌ Blocks Web Thread | ⚠️ Manual container scaling | ✅ **Asynchronous Redis + Celery Worker Pool** |
+| **Automated Grading** | ❌ Pass/Fail Boolean | ❌ Exit code only | ✅ **Structured 100-Point Alignment Rubric** |
+
+---
+
+### 🧩 Core Platform Capabilities
+
+- **🛡️ Kernel-Enforced Isolation**: Executes every evaluation in an ephemeral, unprivileged container with hard memory ceilings (`256MB`), CPU bandwidth throttling (`0.5 vCPU`), zero network access (`--net=none`), and an immutable read-only root filesystem with memory-backed tmpfs.
+- **🔍 Static AST Gatekeeper**: Parses Python Abstract Syntax Trees before execution to intercept malicious imports (`os`, `sys`, `subprocess`, `socket`), dangerous builtins (`eval`, `exec`, `open`), and Python object model escape gadgets (`__subclasses__`, `__globals__`).
+- **📈 Empirical Big-O Complexity Profiling**: Scales input sizes $N \in [50, \dots, 1600]$ to measure empirical wall-clock time and memory consumption, applying Ordinary Least Squares (OLS) regression to verify asymptotic algorithmic complexity.
+- **🧪 Deterministic Test Runner**: Executes user/benchmark test suites deterministically, isolating stdout/stderr and recording millisecond-level execution durations per test case.
+- **⚡ High-Throughput Asynchronous Queue**: Decouples API ingestion from execution using Redis and Celery distributed workers with strict worker prefetch controls.
+- **📊 100-Point Alignment Rubric**: Emits structured, machine-readable JSON reports compliant with AI lab alignment standards, scoring Correctness (40%), Security (30%), Big-O Complexity (20%), and Resource Efficiency (10%).
+
+---
+
+### 🔄 How It Works in 4 Steps
+
+```
+[1. Submit]  ──> Client submits code, test suite, and expected complexity via FastAPI
+[2. Screen]  ──> Static AST Gatekeeper validates syntax & blocks security violations
+[3. Isolate] ──> Ephemeral container executes code under cgroup limits & zero network
+[4. Grade]   ──> System runs pytest + Big-O profiler & returns a 100-point JSON rubric
+```
 
 ---
 
