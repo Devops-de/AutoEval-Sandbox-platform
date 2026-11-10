@@ -7,10 +7,29 @@
 [![AWS ECS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900.svg?logo=amazon-aws&logoColor=white)](https://aws.amazon.com/ecs)
 [![Terraform](https://img.shields.io/badge/Terraform-IaC-7B42BC.svg?logo=terraform&logoColor=white)](https://www.terraform.io)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-28%20Passed-brightgreen.svg)](#-testing--validation)
 
 An enterprise-grade, asynchronous code evaluation platform engineered to safely benchmark and grade untrusted LLM-generated code under strict isolation constraints.
 
-> **Target Audience**: AI Labs (OpenAI, Scale AI, Anthropic), Alignerr, and Senior Python / Platform / DevOps Engineering teams building evaluation harnesses for AI model alignment and code generation benchmarks.
+> **Target Audience**: AI Alignment Labs (OpenAI, Anthropic, Scale AI), Alignerr Evaluation Engineers, and Senior Platform/DevOps Engineers architecting execution backends for LLM code generation benchmarks (e.g., HumanEval, SWE-bench, EvalPlus).
+
+---
+
+## 🔬 About the Platform
+
+Modern Large Language Models (LLMs) trained on code synthesis present a critical infrastructure challenge: **how to evaluate non-deterministic, untrusted code generated at scale without compromising host infrastructure, introducing network pivot vulnerabilities, or suffering resource-exhaustion denial of service.**
+
+Standard evaluation frameworks often suffer from critical security and benchmarking gaps:
+1. **Inadequate Sandboxing**: Relying on in-process `exec()` or unhardened containers leaves worker nodes vulnerable to container breakouts, local privilege escalation, and socket-based SSRF/exfiltration.
+2. **Binary Pass/Fail Limitation**: Traditional unit test suites only measure functional correctness, failing to catch algorithmic antipatterns (e.g., an $O(N^2)$ brute-force solution masquerading as an optimal $O(N \log N)$ algorithm).
+3. **Queue Saturation Under Peak Benchmark Loads**: Evaluating thousands of test generations synchronously degrades API gateways and triggers HTTP timeouts.
+
+**AutoEval Sandbox** solves this by establishing an industry-standard, multi-layered evaluation pipeline:
+- **Pre-execution Static AST Analysis**: Syntactically inspects abstract syntax trees to block malicious imports, calls, and Python sandbox escape gadgets before container spin-up.
+- **Defense-in-Depth Container Isolation**: Enforces Linux kernel `cgroups v2`, CPU CFS quotas, strict memory caps, zero swap, isolated network namespaces (`--net=none`), read-only root filesystems, and complete capability stripping.
+- **Empirical Algorithmic Big-O Profiling**: Benchmarks candidate algorithms across parameterized input dimensions $N \in [50, \dots, 1600]$, applying Ordinary Least Squares (OLS) regression curve fitting to classify runtime complexity classes.
+- **Decoupled Asynchronous Queue**: Leverages Redis and Celery worker pools with deterministic task acknowledgment, enabling high-concurrency batch evaluation workloads.
+- **Structured 100-Point Alignment Rubric**: Outputs machine-readable JSON reports compliant with AI reward modeling and RLHF alignment rubrics.
 
 ---
 
@@ -19,62 +38,137 @@ An enterprise-grade, asynchronous code evaluation platform engineered to safely 
 > **AutoEval Sandboxed Benchmarking Platform**: Architected an automated evaluation engine using Python (FastAPI) and Docker SDK to safely execute untrusted code in hardened, resource-constrained Linux sandboxes; automated deterministic test harnesses (pytest), AST security parsing, and algorithmic Big-O profiling for LLM benchmark alignment.
 
 ### Key Competencies Demonstrated:
-- **Defense-in-Depth Container Sandboxing**: Linux cgroups v2 (`256MB` RAM, `0.5 vCPU`), isolated network namespace (`--net=none`), read-only root filesystems, and dropped Linux capabilities.
+- **Defense-in-Depth Container Sandboxing**: Linux cgroups v2 (`256MB` RAM quota, `0.5 vCPU` CFS throttle), isolated network namespace (`--net=none`), read-only root filesystem with noexec tmpfs, and dropped Linux capabilities (`cap_drop=['ALL']`).
 - **Pre-Execution AST Static Security**: Abstract Syntax Tree parsing to preemptively block RCE, malicious dunder gadgets (`__subclasses__`, `__globals__`), and unauthorized network/file I/O.
-- **Empirical Big-O Profiling Engine**: Dynamic runtime benchmarking scaling across input sizes $N \in [10, 50, \dots, 2500]$ with Ordinary Least Squares regression to classify algorithmic time complexity ($O(1)$, $O(\log N)$, $O(N)$, $O(N \log N)$, $O(N^2)$, $O(2^N)$).
-- **Asynchronous Architecture**: Non-blocking FastAPI gateway backed by Redis and Celery distributed task queues.
+- **Empirical Big-O Profiling Engine**: Dynamic runtime benchmarking scaling across input sizes $N \in [50, \dots, 1600]$ with Ordinary Least Squares regression to classify algorithmic time complexity ($O(1)$, $O(\log N)$, $O(N)$, $O(N \log N)$, $O(N^2)$, $O(2^N)$).
+- **Asynchronous Architecture**: Non-blocking FastAPI gateway backed by Redis and Celery distributed task queues with worker prefetch control.
 - **Production Cloud Infrastructure**: Infrastructure as Code (Terraform) deploying AWS ECS/Fargate, ElastiCache Redis, VPC networking, and Application Load Balancers.
 
 ---
 
-## 🏗 System Architecture
+## 🏗 Technical Architecture & Data Flow
 
-```
-[Client / LLM Benchmark Suite]
-              │
-              ▼ HTTP POST /api/v1/evaluations
-   [FastAPI Gateway (AsyncIO)] 
-              │
-              ▼ Enqueue Task
-    [Redis Broker / Celery Queue]
-              │
-              ▼ Dispatch
- [Worker: Ephemeral Docker Sandbox Engine]
- ├── Pre-Execution AST Static Security (Block RCE, sys, os, eval, dunder exploits)
- ├── Linux cgroups (256MB RAM quota, 0.5 vCPU throttling)
- ├── Isolated Network Namespace (--net=none, no egress)
- ├── Deterministic Test Runner (pytest / assertion captures)
- └── Empirical Big-O Profiler (Wall-clock time & memory scaling vs N)
-              │
-              ▼
- [Structured Evaluation Rubric (0-100) & JSON Report]
+```mermaid
+flowchart TD
+    Client["Client / LLM Benchmark Suite"] -->|HTTP POST /api/v1/evaluations| API["FastAPI Gateway (AsyncIO)"]
+    API -->|Enqueue Evaluation Task| Redis[("Redis Broker & Result Store")]
+    API -->|HTTP GET /api/v1/evaluations/{id}| Client
+    
+    subgraph WorkerNode ["Celery Worker & Sandboxing Engine"]
+        Redis -->|Consume Task (prefetch=1)| Worker["Celery Evaluation Worker"]
+        
+        subgraph StaticAnalysis ["Phase 1: Pre-Execution AST Gatekeeper"]
+            Worker --> AST["Static AST Analyzer & Bandit SAST"]
+            AST -->|Banned imports, calls, or dunders detected?| SecurityCheck{"Passed AST Check?"}
+        end
+
+        subgraph EphemeralSandbox ["Phase 2: Hardened Ephemeral Sandbox"]
+            SecurityCheck -->|Yes| DockerEngine["Docker Sandbox Engine"]
+            DockerEngine -->|Spawn isolated container| Container["Ephemeral Python Container"]
+            Container --- Cgroups["cgroups: 256MB RAM / 0.5 vCPU"]
+            Container --- NetNone["Network: --net=none"]
+            Container --- ReadOnly["Filesystem: read-only + tmpfs"]
+            Container --- Caps["Capabilities: cap_drop=['ALL']"]
+            Container --- NonRoot["User: UID 10001:10001"]
+        end
+
+        subgraph Benchmarking ["Phase 3: Deterministic Test & Complexity Engine"]
+            Container --> PytestRunner["Deterministic Pytest Harness"]
+            Container --> BigOProfiler["Empirical Big-O Profiler (N vs Time/Memory)"]
+        end
+        
+        subgraph Reporting ["Phase 4: Rubric Generation"]
+            SecurityCheck -->|Violations found| RubricGen["Rubric Scoring Engine"]
+            PytestRunner --> RubricGen
+            BigOProfiler --> RubricGen
+            RubricGen --> JSONReport["Standardized 100-Point JSON Report"]
+        end
+    end
+    
+    JSONReport -->|Persist state & metrics| Redis
 ```
 
 ---
 
-## 🛡️ Defense-in-Depth Security Matrix
+## 🛡️ Kernel-Level Security & Defense-in-Depth Matrix
 
-| Layer | Security Mechanism | Threat Prevented |
-| :--- | :--- | :--- |
-| **AST Parser** | Static inspection of AST nodes (`ast.NodeVisitor`) | Blocks dangerous imports (`os`, `sys`, `subprocess`, `socket`, `pickle`), calls (`eval`, `exec`, `open`), and dunder exploits (`__subclasses__`). |
-| **Linux cgroups** | Memory limit (`mem_limit=256m`, `memswap_limit=256m`) | Prevents memory-exhaustion DoS attacks (`[0] * 10**9`). |
-| **CPU Quotas** | CPU throttling (`cpu_period=100000`, `cpu_quota=50000`) | Throttles CPU-intensive infinite loops (`while True: pass`). |
-| **Network Isolation** | Container network namespace (`--net=none`) | Eliminates data exfiltration, socket connections, and reverse shells. |
-| **Filesystem Hardening** | `read_only=True`, isolated `tmpfs` (`/tmp:size=32m,noexec,nosuid`) | Blocks filesystem modification, rootkit installations, or persistence. |
-| **Privilege Dropping** | `cap_drop=['ALL']`, `no-new-privileges:true`, UID `10001` | Mitigates container breakout and privilege escalation vulnerabilities. |
+AutoEval enforces a multi-tier defense boundary designed to withstand malicious payloads, fork bombs, and container breakout exploits:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Host Operating System                        │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │                    Docker Daemon Engine                   │  │
+│  │  ┌─────────────────────────────────────────────────────┐  │  │
+│  │  │               Hardened Sandbox Container            │  │  │
+│  │  │  • Linux cgroups v2 (CPU CFS quota, hard RAM cap)    │  │  │
+│  │  │  • Network Namespace: CLONE_NEWNET (--net=none)     │  │  │
+│  │  │  • Read-only Root Filesystem (read_only=True)       │  │  │
+│  │  │  • Memory-backed /tmp (rw,noexec,nosuid,size=32m)   │  │  │
+│  │  │  • Dropped Linux Capabilities (cap_drop=['ALL'])     │  │  │
+│  │  │  • PR_SET_NO_NEW_PRIVS (no-new-privileges:true)     │  │  │
+│  │  │  • Unprivileged Execution (UID 10001:10001)         │  │  │
+│  │  │  ┌───────────────────────────────────────────────┐  │  │  │
+│  │  │  │              Execution Target                 │  │  │  │
+│  │  │  │  • Pre-Execution AST Static Gatekeeper       │  │  │  │
+│  │  │  │  • Pytest Deterministic Harness               │  │  │  │
+│  │  │  │  • Big-O Parametric Profiler                  │  │  │  │
+│  │  │  └───────────────────────────────────────────────┘  │  │  │
+│  │  └─────────────────────────────────────────────────────┘  │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Layer | Security Mechanism | Technical Specification | Threat Mitigated |
+| :--- | :--- | :--- | :--- |
+| **AST Parser** | Static AST node visitor (`ast.NodeVisitor`) | Pre-execution AST walk inspection blocking disallowed modules, builtins, and attribute lookups. | Blocks RCE, unauthorized filesystem calls, and socket initialization prior to execution. |
+| **Dunder Shield** | Attribute blacklist verification | Prohibits `__subclasses__`, `__bases__`, `__mro__`, `__globals__`, `__code__`, `__builtins__`. | Prevents Python object model sandbox escapes and gadget chain invocations. |
+| **Memory cgroup** | Linux cgroups v2 Memory Controller | `mem_limit="256m"`, `memswap_limit="256m"` (`memory.max=268435456`, `memory.swap.max=0`). | Eliminates host memory exhaustion, OOM cascades, and swap thrashing. |
+| **CPU CFS Quota** | Completely Fair Scheduler (CFS) bandwidth control | `cpu_period=100000`, `cpu_quota=50000` (Enforcing max $0.5$ vCPU execution rate). | Prevents CPU-starvation denial-of-service from infinite loops (`while True`). |
+| **Network Jail** | Network namespace unsharing (`CLONE_NEWNET`) | Docker `network_mode="none"` (zero loopback egress, zero external routing). | Prevents data exfiltration, reverse TCP shells, SSRF, and command & control (C2) beacons. |
+| **Filesystem Jail** | Immutable root mount | `read_only=True`, isolated RAM tmpfs mounted at `/tmp` (`size=32m,noexec,nosuid`). | Eliminates rootkit installation, script injection, and persistent file mutations. |
+| **Privilege Filter** | Linux Capability bounding set & privilege escalation clamp | `cap_drop=["ALL"]`, `security_opt=["no-new-privileges:true"]`, UID `10001:10001`. | Prevents container breakout, setuid binary execution, and root privilege escalation. |
+
+---
+
+## 📈 Empirical Algorithmic Big-O Profiling Methodology
+
+Unlike traditional evaluation engines that merely record execution runtime for a single test input, AutoEval profiles asymptotic time complexity:
+
+1. **Parametric Input Scaling**: Generates synthetic, deterministic inputs across scaled dimensions:
+   $$N \in [50, 100, 200, 400, 800, 1600]$$
+2. **Noise Rejection**: Runs multiple execution trials per $N$ and selects the minimum wall-clock duration ($\Delta t$) to eliminate kernel context-switching anomalies and OS scheduling jitter.
+3. **High-Resolution Resource Tracking**: Utilizes `time.perf_counter_ns` for nanosecond timing and `tracemalloc` for peak heap allocation tracking.
+4. **Ordinary Least Squares (OLS) Curve Fitting**: Transforms $(N, T(N))$ coordinates and computes the Coefficient of Determination ($R^2$) across standard complexity hypotheses:
+   - **Constant**: $T(N) = c$
+   - **Logarithmic**: $T(N) = a \ln(N) + b$
+   - **Linear**: $T(N) = a N + b$
+   - **Linearithmic**: $T(N) = a (N \ln N) + b$
+   - **Quadratic**: $T(N) = a N^2 + b$
+   - **Cubic**: $T(N) = a N^3 + b$
+5. **Occam's Razor / Parsimony Selection**: Implements statistical parsimony: when quadratic and cubic fits both achieve high correlation ($R^2 \ge 0.98$), the engine prefers the lower-order polynomial to prevent overfitting noise.
 
 ---
 
 ## 📊 100-Point Alignment Evaluation Rubric
 
-AutoEval automatically grades submissions using a standardized 4-dimensional alignment rubric:
+AutoEval evaluates submissions against an enterprise 4-pillar alignment rubric:
 
 ```
-Total Score: 100 Points
-├── 🧪 Correctness (40%): Pass rate of unit tests (pass_rate * 40.0)
-├── 🔒 Security & Safety (30%): Zero AST violations & clean SAST scan
-├── ⚡ Algorithmic Big-O (20%): Match between inferred vs expected Big-O complexity
-└── 📈 Resource Efficiency (10%): Wall-clock duration & memory usage within bounds
+Total Rubric Score: 100 Points
+├── 🧪 Correctness (40 pts)
+│   └── Formula: (passed_tests / total_tests) * 40.0
+├── 🔒 Security & Safety (30 pts)
+│   ├── Clean AST Verification: 30.0 pts
+│   └── AST Policy Violation: 0.0 pts (Triggers immediate SECURITY_VIOLATION verdict)
+├── ⚡ Algorithmic Complexity (20 pts)
+│   ├── Exact Match (Inferred == Expected): 20.0 pts
+│   ├── Near-Optimal Match (e.g., O(N) vs O(N log N)): 14.0 pts
+│   └── Discrepant Complexity (e.g., O(N^2) vs Expected O(N)): 5.0 - 8.0 pts
+└── 📈 Resource & Efficiency (10 pts)
+    ├── Fast Execution (< 25% timeout quota): 10.0 pts
+    ├── Moderate Execution (< 75% timeout quota): 7.0 pts
+    └── Near-Quota Execution (>= 75% timeout quota): 4.0 pts
 ```
 
 ---
@@ -85,15 +179,15 @@ Total Score: 100 Points
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/autoeval-sandbox.git
-cd autoeval-sandbox
+git clone https://github.com/Devops-de/AutoEval-Sandbox-platform.git
+cd AutoEval-Sandbox-platform
 
 # Create virtual environment & install dependencies
 python -m venv venv
 source venv/bin/activate  # Or `.\venv\Scripts\activate` on Windows
 pip install -r requirements.txt
 
-# Run the test suite
+# Run the full test suite
 pytest -v
 ```
 
@@ -103,9 +197,9 @@ pytest -v
 uvicorn autoeval.api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Interactive API documentation will be available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+Interactive API documentation:
+- **Swagger UI**: `http://localhost:8000/docs`
+- **ReDoc**: `http://localhost:8000/redoc`
 
 ### 3. Run Full Distributed Stack via Docker Compose
 
@@ -113,10 +207,10 @@ Interactive API documentation will be available at:
 docker compose -f docker/docker-compose.yml up --build
 ```
 
-This launches:
-1. `autoeval-redis` (Redis 7 In-Memory Broker)
-2. `autoeval-api` (FastAPI Gateway)
-3. `autoeval-worker` (Celery Distributed Evaluation Worker with Docker socket access)
+Services initialized:
+1. `autoeval-redis`: Redis 7 in-memory task broker and result store.
+2. `autoeval-api`: FastAPI asynchronous gateway service.
+3. `autoeval-worker`: Celery worker with access to Docker daemon for ephemeral sandbox instantiation.
 
 ---
 
@@ -136,11 +230,11 @@ Evaluates code in real-time and returns the complete JSON rubric report:
 }
 ```
 
-#### Example JSON Rubric Response:
+#### Example Output Report:
 
 ```json
 {
-  "task_id": "967664e5-472d-41da-ae3a-8610ebfd7e42",
+  "task_id": "a9a7a61c-aa69-4b81-945a-1354d6eda64d",
   "status": "COMPLETED",
   "verdict": "PASSED",
   "score_breakdown": {
@@ -161,23 +255,25 @@ Evaluates code in real-time and returns the complete JSON rubric report:
     "passed": 2,
     "failed": 0,
     "pass_rate": 1.0,
-    "duration_ms": 1.25
+    "duration_ms": 1.39
   },
   "algorithmic_complexity": {
     "inferred_complexity": "O(N log N)",
     "expected_complexity": "O(N log N)",
     "complexity_matched": true,
-    "r_squared": 0.9842,
+    "r_squared": 0.9997,
     "data_points": [
-      { "n": 50, "wall_time_ms": 0.08, "memory_peak_kb": 12.4 },
-      { "n": 100, "wall_time_ms": 0.17, "memory_peak_kb": 22.8 },
-      { "n": 200, "wall_time_ms": 0.38, "memory_peak_kb": 43.1 },
-      { "n": 400, "wall_time_ms": 0.82, "memory_peak_kb": 85.0 }
+      { "n": 50, "wall_time_ms": 0.156, "memory_peak_kb": 99.26 },
+      { "n": 100, "wall_time_ms": 0.317, "memory_peak_kb": 3.65 },
+      { "n": 200, "wall_time_ms": 0.667, "memory_peak_kb": 6.33 },
+      { "n": 400, "wall_time_ms": 1.458, "memory_peak_kb": 16.92 },
+      { "n": 800, "wall_time_ms": 3.073, "memory_peak_kb": 39.43 },
+      { "n": 1600, "wall_time_ms": 6.514, "memory_peak_kb": 95.75 }
     ]
   },
   "resource_utilization": {
-    "wall_clock_time_ms": 42.15,
-    "cpu_time_ms": 42.15,
+    "wall_clock_time_ms": 46.29,
+    "cpu_time_ms": 46.29,
     "peak_memory_mb": 0.85,
     "memory_limit_mb": 256
   }
@@ -219,15 +315,12 @@ terraform apply tfplan
 ## 🧪 Testing & Validation
 
 ```bash
-# Run all unit and integration tests
+# Run all unit and integration tests (28 tests)
 pytest -v
-
-# Run with coverage report
-pytest --cov=autoeval --cov-report=term-missing
 ```
 
 ---
 
 ## 📄 License
 
-MIT License. Designed for portfolio demonstration, LLM alignment benchmarking, and production engineering evaluation platforms.
+MIT License. See [LICENSE](LICENSE) for details.
