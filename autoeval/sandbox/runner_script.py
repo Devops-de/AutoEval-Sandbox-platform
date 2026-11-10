@@ -8,9 +8,10 @@ and emits structured JSON to stdout.
 import json
 import os
 import sys
-from autoeval.security.ast_analyzer import analyze_code_ast
-from autoeval.benchmarking.test_runner import run_deterministic_tests
+
 from autoeval.benchmarking.big_o_profiler import profile_function_complexity
+from autoeval.benchmarking.test_runner import run_deterministic_tests
+from autoeval.security.ast_analyzer import analyze_code_ast
 
 
 def apply_linux_resource_limits(memory_limit_mb: int) -> None:
@@ -91,7 +92,7 @@ def main() -> None:
     payload_file = os.getenv("PAYLOAD_PATH", "/tmp/payload.json")
 
     if os.path.exists(payload_file):
-        with open(payload_file, "r", encoding="utf-8") as f:
+        with open(payload_file, encoding="utf-8") as f:
             input_str = f.read()
     else:
         input_str = sys.stdin.read()

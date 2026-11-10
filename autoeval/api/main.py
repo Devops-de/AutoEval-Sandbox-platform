@@ -1,10 +1,12 @@
 """FastAPI Main Application and Lifespan Entrypoint."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from autoeval.api.routes import router
 from autoeval.core.config import settings
 
@@ -51,4 +53,5 @@ app.include_router(router)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("autoeval.api.main:app", host="0.0.0.0", port=8000, reload=True)

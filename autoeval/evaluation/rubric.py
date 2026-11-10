@@ -7,6 +7,7 @@ and structured JSON benchmark report.
 
 from datetime import datetime, timezone
 from typing import Any
+
 from autoeval.api.schemas import (
     ASTSecurityResult,
     BanditResult,
@@ -37,10 +38,7 @@ def calculate_rubric_score(
 ) -> RubricScoreBreakdown:
     """Calculates granular rubric score breakdown across 4 dimensions (0 - 100)."""
     # 1. Security Score (0 - 30 pts)
-    if not ast_safe:
-        security_score = 0.0
-    else:
-        security_score = 30.0 if bandit_passed else 20.0
+    security_score = 0.0 if not ast_safe else 30.0 if bandit_passed else 20.0
 
     # 2. Correctness Score (0 - 40 pts)
     correctness_score = round(max(0.0, min(40.0, pass_rate * 40.0)), 2)
@@ -52,7 +50,9 @@ def calculate_rubric_score(
             expected = expected_complexity.replace(" ", "").upper()
             if inferred == expected:
                 complexity_score = 20.0
-            elif ("LOG" in expected and "LOG" in inferred) or (expected == "O(N)" and inferred == "O(NLOGN)"):
+            elif ("LOG" in expected and "LOG" in inferred) or (
+                expected == "O(N)" and inferred == "O(NLOGN)"
+            ):
                 complexity_score = 14.0
             elif "O(N^2)" in inferred and "O(N^2)" not in expected:
                 complexity_score = 5.0
@@ -165,7 +165,9 @@ def generate_evaluation_report(
     else:
         test_results = TestRunResult()
     big_o_result: BigOResult | None = data.get("algorithmic_complexity")
-    resource_utilization: ResourceUtilization = data.get("resource_utilization") or ResourceUtilization()
+    resource_utilization: ResourceUtilization = (
+        data.get("resource_utilization") or ResourceUtilization()
+    )
 
     # Determine Verdict
     verdict_override = data.get("verdict_override")

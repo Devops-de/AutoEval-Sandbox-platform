@@ -8,10 +8,12 @@ Spins up hardened, isolated Docker containers to execute untrusted code:
 - Unprivileged user namespace
 """
 
+import contextlib
 import json
 import logging
 import time
 from typing import Any
+
 from autoeval.api.schemas import (
     ASTSecurityResult,
     BigOResult,
@@ -23,7 +25,6 @@ from autoeval.core.config import settings
 from autoeval.core.exceptions import (
     ResourceExceededError,
     SandboxTimeoutError,
-    SecurityViolationError,
 )
 from autoeval.sandbox.mock_engine import MockSandboxEngine
 
@@ -59,6 +60,7 @@ class DockerSandboxEngine:
         # Fast socket/named pipe pre-check to prevent Windows/Linux kernel pipe timeouts
         import os
         import sys
+
         if sys.platform == "win32":
             if not os.path.exists(r"\\.\pipe\docker_engine"):
                 self._is_docker_available = False
@@ -70,13 +72,16 @@ class DockerSandboxEngine:
 
         try:
             import docker
+
             client = docker.from_env(timeout=1)
             client.ping()
             self._docker_client = client
             self._is_docker_available = True
             logger.info("Docker daemon connected successfully.")
         except Exception as e:
-            logger.warning(f"Docker daemon not accessible ({e}). Falling back to MockSandboxEngine.")
+            logger.warning(
+                f"Docker daemon not accessible ({e}). Falling back to MockSandboxEngine."
+            )
             self._is_docker_available = False
 
         return self._is_docker_available
@@ -89,22 +94,25 @@ class DockerSandboxEngine:
         if not self.is_docker_available:
             return self.mock_fallback.execute(request)
 
+        from docker.errors import ContainerError
+
         import docker
-        from docker.errors import ContainerError, ImageNotFound, APIError
 
         client = self._docker_client or docker.from_env()
         timeout = request.timeout_seconds or self.default_timeout_seconds
         memory_mb = request.memory_limit_mb or settings.memory_limit_mb
         cpu_quota = int((request.cpu_quota_vcpu or settings.cpu_quota_vcpu) * 100000)
 
-        payload_json = json.dumps({
-            "code": request.code,
-            "test_suite": request.test_suite,
-            "entrypoint": request.entrypoint,
-            "expected_complexity": request.expected_complexity,
-            "input_generator_type": request.input_generator_type,
-            "memory_limit_mb": memory_mb,
-        })
+        payload_json = json.dumps(
+            {
+                "code": request.code,
+                "test_suite": request.test_suite,
+                "entrypoint": request.entrypoint,
+                "expected_complexity": request.expected_complexity,
+                "input_generator_type": request.input_generator_type,
+                "memory_limit_mb": memory_mb,
+            }
+        )
 
         # Command to pass payload into runner script inside container
         command = [
@@ -148,10 +156,8 @@ class DockerSandboxEngine:
                     break
                 time.sleep(0.1)
             else:
-                try:
+                with contextlib.suppress(Exception):
                     container.kill()
-                except Exception:
-                    pass
                 raise SandboxTimeoutError(
                     f"Execution exceeded strict timeout of {timeout}s",
                     timeout_seconds=timeout,
@@ -175,7 +181,9 @@ class DockerSandboxEngine:
             output_data = json.loads(logs)
 
             return {
-                "verdict_override": output_data.get("status") if output_data.get("status") != "SUCCESS" else None,
+                "verdict_override": output_data.get("status")
+                if output_data.get("status") != "SUCCESS"
+                else None,
                 "security_analysis": ASTSecurityResult(**output_data["security_analysis"]),
                 "bandit_analysis": None,
                 "test_results": TestRunResult(**output_data["test_results"]),
@@ -195,11 +203,11 @@ class DockerSandboxEngine:
         except ResourceExceededError:
             raise
         except Exception as e:
-            logger.warning(f"Docker sandbox execution failed ({e}). Re-routing to MockSandboxEngine.")
+            logger.warning(
+                f"Docker sandbox execution failed ({e}). Re-routing to MockSandboxEngine."
+            )
             return self.mock_fallback.execute(request)
         finally:
             if container:
-                try:
+                with contextlib.suppress(Exception):
                     container.remove(force=True)
-                except Exception:
-                    pass

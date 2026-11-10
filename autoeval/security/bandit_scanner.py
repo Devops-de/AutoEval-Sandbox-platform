@@ -1,9 +1,11 @@
 """Bandit Static Application Security Testing (SAST) Scanner Integration."""
 
+import contextlib
 import logging
 import tempfile
 from pathlib import Path
 from typing import Any
+
 from autoeval.api.schemas import BanditResult
 
 logger = logging.getLogger(__name__)
@@ -35,13 +37,15 @@ def run_bandit_scan(code: str) -> BanditResult:
         for issue in mgr.get_issue_list():
             # Only consider Medium or High severity issues
             if issue.severity in ("MEDIUM", "HIGH"):
-                issues.append({
-                    "test_id": issue.test_id,
-                    "text": issue.text,
-                    "severity": issue.severity,
-                    "confidence": issue.confidence,
-                    "line_number": issue.lineno,
-                })
+                issues.append(
+                    {
+                        "test_id": issue.test_id,
+                        "text": issue.text,
+                        "severity": issue.severity,
+                        "confidence": issue.confidence,
+                        "line_number": issue.lineno,
+                    }
+                )
 
         passed = len(issues) == 0
         return BanditResult(passed=passed, issues_found=len(issues), details=issues)
@@ -49,7 +53,5 @@ def run_bandit_scan(code: str) -> BanditResult:
         logger.warning(f"Error during Bandit scan: {e}")
         return BanditResult(passed=True, issues_found=0, details=[{"error": str(e)}])
     finally:
-        try:
+        with contextlib.suppress(OSError):
             Path(tmp_path).unlink(missing_ok=True)
-        except OSError:
-            pass

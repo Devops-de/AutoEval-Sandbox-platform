@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -43,9 +44,15 @@ class EvaluationRequest(BaseModel):
         default="random_integers",
         description="Type of test input scaling: 'random_integers', 'sorted_integers', 'reversed_integers', 'string_tokens'.",
     )
-    timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0, description="Max execution timeout in seconds.")
-    memory_limit_mb: int = Field(default=256, ge=32, le=1024, description="Container cgroup memory quota in MB.")
-    cpu_quota_vcpu: float = Field(default=0.5, ge=0.1, le=2.0, description="Container CPU quota in vCPU.")
+    timeout_seconds: float = Field(
+        default=10.0, ge=1.0, le=60.0, description="Max execution timeout in seconds."
+    )
+    memory_limit_mb: int = Field(
+        default=256, ge=32, le=1024, description="Container cgroup memory quota in MB."
+    )
+    cpu_quota_vcpu: float = Field(
+        default=0.5, ge=0.1, le=2.0, description="Container CPU quota in vCPU."
+    )
 
     model_config = {
         "json_schema_extra": {
@@ -65,12 +72,22 @@ class ASTSecurityResult(BaseModel):
     """Static AST security analysis report."""
 
     is_safe: bool = Field(..., description="True if code passes all AST security checks.")
-    violations: list[str] = Field(default_factory=list, description="List of detected policy violations.")
-    banned_imports: list[str] = Field(default_factory=list, description="Disallowed modules imported.")
-    banned_calls: list[str] = Field(default_factory=list, description="Disallowed functions or builtins invoked.")
-    banned_attributes: list[str] = Field(default_factory=list, description="Disallowed dunder/sensitive attributes.")
+    violations: list[str] = Field(
+        default_factory=list, description="List of detected policy violations."
+    )
+    banned_imports: list[str] = Field(
+        default_factory=list, description="Disallowed modules imported."
+    )
+    banned_calls: list[str] = Field(
+        default_factory=list, description="Disallowed functions or builtins invoked."
+    )
+    banned_attributes: list[str] = Field(
+        default_factory=list, description="Disallowed dunder/sensitive attributes."
+    )
     max_loop_depth: int = Field(default=0, description="Maximum nested loop depth detected in AST.")
-    has_recursion: bool = Field(default=False, description="Whether recursive function definitions are present.")
+    has_recursion: bool = Field(
+        default=False, description="Whether recursive function definitions are present."
+    )
 
 
 class BanditResult(BaseModel):
@@ -88,7 +105,9 @@ class TestCaseResult(BaseModel):
     name: str = Field(..., description="Name of the test function or case.")
     status: str = Field(..., description="'PASSED', 'FAILED', or 'ERROR'.")
     duration_ms: float = Field(default=0.0, description="Duration in milliseconds.")
-    error_message: str | None = Field(default=None, description="Assertion failure message or traceback.")
+    error_message: str | None = Field(
+        default=None, description="Assertion failure message or traceback."
+    )
 
 
 class TestRunResult(BaseModel):
@@ -101,7 +120,9 @@ class TestRunResult(BaseModel):
     errors: int = Field(default=0, description="Number of test harness setup/runtime errors.")
     pass_rate: float = Field(default=0.0, description="Fraction of passing tests (0.0 to 1.0).")
     duration_ms: float = Field(default=0.0, description="Total test duration in ms.")
-    test_cases: list[TestCaseResult] = Field(default_factory=list, description="Individual test details.")
+    test_cases: list[TestCaseResult] = Field(
+        default_factory=list, description="Individual test details."
+    )
     raw_output: str = Field(default="", description="Captured stdout/stderr from test runner.")
 
 
@@ -117,10 +138,18 @@ class BigOResult(BaseModel):
     """Empirical algorithmic complexity analysis."""
 
     inferred_complexity: str = Field(..., description="Best-fit Big-O class (e.g. O(N log N)).")
-    expected_complexity: str | None = Field(default=None, description="Expected Big-O from request.")
-    complexity_matched: bool | None = Field(default=None, description="True if inferred matches expected.")
-    r_squared: float = Field(..., description="Coefficient of determination for best-fit model (0 to 1).")
-    data_points: list[ComplexityDataPoint] = Field(default_factory=list, description="Empirical benchmark points.")
+    expected_complexity: str | None = Field(
+        default=None, description="Expected Big-O from request."
+    )
+    complexity_matched: bool | None = Field(
+        default=None, description="True if inferred matches expected."
+    )
+    r_squared: float = Field(
+        ..., description="Coefficient of determination for best-fit model (0 to 1)."
+    )
+    data_points: list[ComplexityDataPoint] = Field(
+        default_factory=list, description="Empirical benchmark points."
+    )
     model_fit_scores: dict[str, float] = Field(
         default_factory=dict, description="R^2 correlation scores for each candidate Big-O model."
     )
@@ -138,10 +167,18 @@ class ResourceUtilization(BaseModel):
 class RubricScoreBreakdown(BaseModel):
     """Detailed score breakdown matching alignment rubrics."""
 
-    correctness_score: float = Field(default=0.0, description="Score for unit test pass rate (0 to 40).")
-    security_score: float = Field(default=0.0, description="Score for AST & SAST safety compliance (0 to 30).")
-    complexity_score: float = Field(default=0.0, description="Score for Big-O complexity alignment (0 to 20).")
-    efficiency_score: float = Field(default=0.0, description="Score for resource bounds & efficiency (0 to 10).")
+    correctness_score: float = Field(
+        default=0.0, description="Score for unit test pass rate (0 to 40)."
+    )
+    security_score: float = Field(
+        default=0.0, description="Score for AST & SAST safety compliance (0 to 30)."
+    )
+    complexity_score: float = Field(
+        default=0.0, description="Score for Big-O complexity alignment (0 to 20)."
+    )
+    efficiency_score: float = Field(
+        default=0.0, description="Score for resource bounds & efficiency (0 to 10)."
+    )
     total_score: float = Field(default=0.0, description="Cumulative score (0 to 100).")
 
 
@@ -153,11 +190,19 @@ class EvaluationReport(BaseModel):
     verdict: EvaluationVerdict = Field(..., description="Overall verdict.")
     score_breakdown: RubricScoreBreakdown = Field(..., description="Rubric score breakdown.")
     security_analysis: ASTSecurityResult = Field(..., description="Static AST security results.")
-    bandit_analysis: BanditResult | None = Field(default=None, description="Bandit SAST scanner results.")
+    bandit_analysis: BanditResult | None = Field(
+        default=None, description="Bandit SAST scanner results."
+    )
     test_results: TestRunResult = Field(..., description="Deterministic unit test results.")
-    algorithmic_complexity: BigOResult | None = Field(default=None, description="Big-O profiling report.")
-    resource_utilization: ResourceUtilization = Field(..., description="Execution resource metrics.")
-    error_details: str | None = Field(default=None, description="Top-level error explanation if failed.")
+    algorithmic_complexity: BigOResult | None = Field(
+        default=None, description="Big-O profiling report."
+    )
+    resource_utilization: ResourceUtilization = Field(
+        ..., description="Execution resource metrics."
+    )
+    error_details: str | None = Field(
+        default=None, description="Top-level error explanation if failed."
+    )
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = Field(default=None)
 

@@ -8,16 +8,17 @@ import concurrent.futures
 import time
 import tracemalloc
 from typing import Any
+
 from autoeval.api.schemas import (
     EvaluationRequest,
     ResourceUtilization,
     TestRunResult,
 )
+from autoeval.benchmarking.big_o_profiler import profile_function_complexity
+from autoeval.benchmarking.test_runner import run_deterministic_tests
 from autoeval.core.exceptions import SandboxTimeoutError
 from autoeval.security.ast_analyzer import analyze_code_ast
 from autoeval.security.bandit_scanner import run_bandit_scan
-from autoeval.benchmarking.test_runner import run_deterministic_tests
-from autoeval.benchmarking.big_o_profiler import profile_function_complexity
 
 
 class MockSandboxEngine:
@@ -34,11 +35,11 @@ class MockSandboxEngine:
             future = executor.submit(self._run_internal, request)
             try:
                 return future.result(timeout=timeout)
-            except concurrent.futures.TimeoutError:
+            except concurrent.futures.TimeoutError as err:
                 raise SandboxTimeoutError(
                     f"Execution exceeded timeout quota of {timeout}s",
                     timeout_seconds=timeout,
-                )
+                ) from err
 
     def _run_internal(self, request: EvaluationRequest) -> dict[str, Any]:
         wall_start = time.perf_counter_ns()

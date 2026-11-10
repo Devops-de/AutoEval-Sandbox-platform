@@ -1,12 +1,12 @@
 """Unit tests for Empirical Big-O Profiler and Curve Fitting."""
 
+from autoeval.api.schemas import ComplexityDataPoint
 from autoeval.benchmarking.big_o_profiler import (
     compute_linear_regression,
     fit_complexity_models,
     generate_input_for_n,
     profile_function_complexity,
 )
-from autoeval.api.schemas import ComplexityDataPoint
 
 
 def test_linear_regression_perfect_fit():

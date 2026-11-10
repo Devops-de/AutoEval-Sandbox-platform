@@ -1,6 +1,7 @@
 """Celery application instance and Redis broker configuration."""
 
 import logging
+
 from autoeval.core.config import settings
 
 logger = logging.getLogger(__name__)

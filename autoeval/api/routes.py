@@ -2,7 +2,9 @@
 
 import uuid
 from typing import Any
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+
 from autoeval.api.schemas import (
     EvaluationReport,
     EvaluationRequest,
@@ -62,6 +64,7 @@ def submit_evaluation(
     if celery_app is not None and settings.app_env != "test":
         try:
             from autoeval.worker.tasks import evaluate_code_celery_task
+
             evaluate_code_celery_task.apply_async(args=[task_id, req_dict], task_id=task_id)
             dispatched_celery = True
         except Exception:
@@ -135,6 +138,7 @@ def health_check() -> dict[str, Any]:
     if settings.app_env == "production":
         try:
             import redis
+
             r = redis.Redis.from_url(
                 settings.redis_url,
                 socket_timeout=0.2,
@@ -174,12 +178,40 @@ def rubric_spec() -> dict[str, Any]:
         },
         "security_policy": {
             "disallowed_modules": [
-                "os", "sys", "subprocess", "socket", "shutil", "urllib", "requests", "importlib", "pickle"
+                "os",
+                "sys",
+                "subprocess",
+                "socket",
+                "shutil",
+                "urllib",
+                "requests",
+                "importlib",
+                "pickle",
             ],
-            "disallowed_builtins": ["eval", "exec", "compile", "open", "__import__", "globals", "locals"],
-            "disallowed_dunders": ["__subclasses__", "__bases__", "__mro__", "__globals__", "__code__"],
+            "disallowed_builtins": [
+                "eval",
+                "exec",
+                "compile",
+                "open",
+                "__import__",
+                "globals",
+                "locals",
+            ],
+            "disallowed_dunders": [
+                "__subclasses__",
+                "__bases__",
+                "__mro__",
+                "__globals__",
+                "__code__",
+            ],
         },
         "complexity_classes_supported": [
-            "O(1)", "O(log N)", "O(N)", "O(N log N)", "O(N^2)", "O(N^3)", "O(2^N)"
+            "O(1)",
+            "O(log N)",
+            "O(N)",
+            "O(N log N)",
+            "O(N^2)",
+            "O(N^3)",
+            "O(2^N)",
         ],
     }

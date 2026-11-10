@@ -8,9 +8,8 @@ Inspects code structure before execution:
 """
 
 import ast
-from typing import Any
-from autoeval.api.schemas import ASTSecurityResult
 
+from autoeval.api.schemas import ASTSecurityResult
 
 # Whitelist of common safe standard library modules
 SAFE_MODULES = {
@@ -105,7 +104,9 @@ class SecurityASTVisitor(ast.NodeVisitor):
     def visit_Import(self, node: ast.Import) -> None:
         for alias in node.names:
             root_module = alias.name.split(".")[0]
-            if root_module in BANNED_MODULES or (self.strict_mode and root_module not in SAFE_MODULES):
+            if root_module in BANNED_MODULES or (
+                self.strict_mode and root_module not in SAFE_MODULES
+            ):
                 msg = f"Disallowed module import: '{alias.name}' at line {node.lineno}"
                 self.violations.append(msg)
                 self.banned_imports.append(alias.name)
@@ -114,7 +115,9 @@ class SecurityASTVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if node.module:
             root_module = node.module.split(".")[0]
-            if root_module in BANNED_MODULES or (self.strict_mode and root_module not in SAFE_MODULES):
+            if root_module in BANNED_MODULES or (
+                self.strict_mode and root_module not in SAFE_MODULES
+            ):
                 msg = f"Disallowed module import: 'from {node.module}' at line {node.lineno}"
                 self.violations.append(msg)
                 self.banned_imports.append(node.module)

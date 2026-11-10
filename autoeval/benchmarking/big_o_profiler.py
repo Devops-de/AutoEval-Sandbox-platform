@@ -15,7 +15,9 @@ import math
 import random
 import time
 import tracemalloc
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
+
 from autoeval.api.schemas import BigOResult, ComplexityDataPoint
 
 
@@ -33,7 +35,9 @@ def generate_input_for_n(n: int, generator_type: str = "random_integers") -> Any
         return [rng.randint(-100000, 100000) for _ in range(n)]
 
 
-def compute_linear_regression(x_vals: list[float], y_vals: list[float]) -> tuple[float, float, float]:
+def compute_linear_regression(
+    x_vals: list[float], y_vals: list[float]
+) -> tuple[float, float, float]:
     """Computes ordinary least squares regression y = a*x + b.
 
     Returns:
@@ -48,7 +52,7 @@ def compute_linear_regression(x_vals: list[float], y_vals: list[float]) -> tuple
 
     ss_xx = sum((x - mean_x) ** 2 for x in x_vals)
     ss_yy = sum((y - mean_y) ** 2 for y in y_vals)
-    ss_xy = sum((x - mean_x) * (y - mean_y) for x, y in zip(x_vals, y_vals))
+    ss_xy = sum((x - mean_x) * (y - mean_y) for x, y in zip(x_vals, y_vals, strict=False))
 
     if ss_xx <= 1e-12:
         return 0.0, mean_y, 0.0
@@ -61,13 +65,15 @@ def compute_linear_regression(x_vals: list[float], y_vals: list[float]) -> tuple
         return slope, intercept, 1.0
 
     # Calculate R^2
-    ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(x_vals, y_vals))
+    ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(x_vals, y_vals, strict=False))
     r_squared = max(0.0, min(1.0, 1.0 - (ss_res / ss_yy)))
 
     return slope, intercept, r_squared
 
 
-def fit_complexity_models(data_points: list[ComplexityDataPoint]) -> tuple[str, float, dict[str, float]]:
+def fit_complexity_models(
+    data_points: list[ComplexityDataPoint],
+) -> tuple[str, float, dict[str, float]]:
     """Fits execution time across candidate complexity models.
 
     Uses regression R^2 combined with growth factor analysis.
@@ -83,11 +89,10 @@ def fit_complexity_models(data_points: list[ComplexityDataPoint]) -> tuple[str, 
     for i in range(1, len(data_points)):
         n_ratio = n_vals[i] / n_vals[i - 1]
         t_ratio = t_vals[i] / t_vals[i - 1]
-        if n_ratio > 1.0:
+        if n_ratio > 1.0 and t_ratio > 0:
             # Empirical growth exponent: t_ratio = (n_ratio)^k => k = log(t_ratio) / log(n_ratio)
-            if t_ratio > 0:
-                k = math.log(max(1e-6, t_ratio)) / math.log(n_ratio)
-                ratios.append(k)
+            k = math.log(max(1e-6, t_ratio)) / math.log(n_ratio)
+            ratios.append(k)
 
     avg_growth_k = sum(ratios) / len(ratios) if ratios else 1.0
 
@@ -97,8 +102,8 @@ def fit_complexity_models(data_points: list[ComplexityDataPoint]) -> tuple[str, 
         "O(log N)": [math.log(max(2.0, n)) for n in n_vals],
         "O(N)": [n for n in n_vals],
         "O(N log N)": [n * math.log(max(2.0, n)) for n in n_vals],
-        "O(N^2)": [n ** 2 for n in n_vals],
-        "O(N^3)": [n ** 3 for n in n_vals],
+        "O(N^2)": [n**2 for n in n_vals],
+        "O(N^3)": [n**3 for n in n_vals],
     }
 
     fit_scores: dict[str, float] = {}
@@ -139,7 +144,11 @@ def fit_complexity_models(data_points: list[ComplexityDataPoint]) -> tuple[str, 
         if fit_scores.get("O(N^2)", 0.0) >= 0.98:
             inferred = "O(N^2)"
         else:
-            inferred = "O(N^2)" if fit_scores.get("O(N^2)", 0.0) >= fit_scores.get("O(N^3)", 0.0) else "O(N^3)"
+            inferred = (
+                "O(N^2)"
+                if fit_scores.get("O(N^2)", 0.0) >= fit_scores.get("O(N^3)", 0.0)
+                else "O(N^3)"
+            )
     else:
         inferred = "O(N^2)" if fit_scores.get("O(N^2)", 0.0) >= 0.98 else "O(N^3)"
 

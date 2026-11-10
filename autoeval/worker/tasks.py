@@ -2,7 +2,8 @@
 
 import logging
 from typing import Any
-from autoeval.api.schemas import EvaluationReport, EvaluationRequest
+
+from autoeval.api.schemas import EvaluationRequest
 from autoeval.evaluation.rubric import generate_evaluation_report
 from autoeval.sandbox.docker_engine import DockerSandboxEngine
 from autoeval.worker.celery_app import celery_app
@@ -42,7 +43,10 @@ def process_evaluation_job(task_id: str, request_data: dict[str, Any]) -> dict[s
 
 # Register Celery task if Celery is enabled
 if celery_app is not None:
+
     @celery_app.task(name="autoeval.evaluate_code", bind=True)
-    def evaluate_code_celery_task(self, task_id: str, request_data: dict[str, Any]) -> dict[str, Any]:
+    def evaluate_code_celery_task(
+        self, task_id: str, request_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Celery distributed task wrapper."""
         return process_evaluation_job(task_id, request_data)

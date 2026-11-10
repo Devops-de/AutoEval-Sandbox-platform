@@ -11,16 +11,24 @@ class Settings:
     app_name: str = "AutoEval Sandbox"
     app_version: str = "1.0.0"
     app_env: str = field(default_factory=lambda: os.getenv("APP_ENV", "development"))
-    debug: bool = field(default_factory=lambda: os.getenv("DEBUG", "false").lower() in ("true", "1"))
+    debug: bool = field(
+        default_factory=lambda: os.getenv("DEBUG", "false").lower() in ("true", "1")
+    )
 
     # Redis & Celery broker
-    redis_url: str = field(default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+    redis_url: str = field(
+        default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    )
     celery_result_backend: str = field(
-        default_factory=lambda: os.getenv("CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        default_factory=lambda: os.getenv(
+            "CELERY_RESULT_BACKEND", os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        )
     )
 
     # Sandbox Isolation & Cgroup Constraints
-    docker_image: str = field(default_factory=lambda: os.getenv("DOCKER_IMAGE", "autoeval-sandbox:latest"))
+    docker_image: str = field(
+        default_factory=lambda: os.getenv("DOCKER_IMAGE", "autoeval-sandbox:latest")
+    )
     memory_limit_mb: int = field(default_factory=lambda: int(os.getenv("MEMORY_LIMIT_MB", "256")))
     cpu_quota_vcpu: float = field(default_factory=lambda: float(os.getenv("CPU_QUOTA_VCPU", "0.5")))
     tmpfs_size_mb: int = field(default_factory=lambda: int(os.getenv("TMPFS_SIZE_MB", "32")))
