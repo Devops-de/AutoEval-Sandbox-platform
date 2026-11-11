@@ -11,7 +11,7 @@
 
 An enterprise-grade, asynchronous code evaluation platform engineered to safely benchmark and grade untrusted LLM-generated code under strict isolation constraints.
 
-> **Target Audience**: AI Alignment Labs (OpenAI, Anthropic, Scale AI), Alignerr Evaluation Engineers, and Platform/DevOps Engineers building automated execution backends for code synthesis benchmarks (HumanEval, SWE-bench, EvalPlus).
+
 
 ---
 
